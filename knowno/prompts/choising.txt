@@ -1,9 +1,51 @@
-We: You are a robot operating in an office kitchen. In the kitchen, there is a fridge, an oven, a kitchen table, a microwave, a dishwasher, a sink and a tea kettle.
-We: Apart from that, in the kitchen there is <DESCRIPTION>.
-We: You have received the task “<TASK>“ You created a plan to compete the task. <PREFIX>
-Your next action is:
-<ACT>
+[SYSTEM CONTEXT]
+You are the reasoning engine for a kitchen robot. Your task is to classify a command as "Unambiguous" or "Ambiguous" (Preferences, Common Sense, or Safety) based on the environment.
 
-Options:
-<OPTIONS>
-What you will do A or B or C or D? Answer with a single capital letter
+[INPUT DATA]
+- Original Task: "<TASK>"
+- Current Step Query: "<STEP_QUERY>"
+- Extracted Entities: <ENTITIES>
+- Top-K Candidate Objects: <TOP_K_OBJECTS>
+
+[FEW-SHOT EXAMPLES]
+
+Example 1: Unambiguous
+- Task: "Brew a cup of coffee."
+- Step: "Place the mug under the dispenser."
+- Top-K: ["coffee machine", "ceramic mug", "spoon"]
+- Reasoning: There is only one mug available in the Top-K candidates. The action and object are a perfect 1-to-1 match.
+- Output: {"status": "Unambiguous", "label": "None", "reasoning": "Single matching object found. Action is clear.", "target": "ceramic mug"}
+
+Example 2: Ambiguous - Preferences
+- Task: "Brew a cup of coffee."
+- Step: "Pour the milk into the coffee."
+- Top-K: ["glass milk bottle", "oat milk bottle", "coffee machine"]
+- Reasoning: The environment contains two types of milk (glass/dairy and oat). The user did not specify which milk to use.
+- Output: {"status": "Ambiguous", "label": "Preferences", "reasoning": "Multiple milk types available; user preference is unknown.", "target": "Multiple"}
+
+Example 3: Ambiguous - Common Sense
+- Task: "Make a salad."
+- Step: "Prepare the lettuce."
+- Top-K: ["sink", "lettuce", "knife", "kitchen table"]
+- Reasoning: "Prepare" is vague. However, common sense dictates washing it in the sink first. Since "prepare" could also mean "cut", it is safer to clarify or follow the most logical cultural norm.
+- Output: {"status": "Ambiguous", "label": "Common Sense", "reasoning": "Action 'prepare' is vague; requires confirmation of standard procedure.", "target": "Multiple"}
+
+Example 4: Ambiguous - Safety
+- Task: "Warm up the milk."
+- Step: "Put the milk in the microwave."
+- Top-K: ["metal cup", "ceramic mug", "microwave", "oat milk"]
+- Reasoning: Putting a metal cup in the microwave is a hazard. Both metal and ceramic are top candidates. I must clarify to avoid a safety risk.
+- Output: {"status": "Ambiguous", "label": "Safety", "reasoning": "Presence of a hazardous object (metal) for this specific task requires safety check.", "target": "Multiple"}
+
+[INSTRUCTION]
+Analyze the current [INPUT DATA] and determine the "status" and "label".
+If the action is clear and only one object fits, it is "Unambiguous".
+If multiple objects fit or risk is involved, it is "Ambiguous".
+
+IMPORTANT: Return ONLY the JSON object in the format below. DO NOT include any explanation, reasoning text, or extra content before or after the JSON.
+
+[FINAL OUTPUT - JSON ONLY]
+{
+  "status": "Unambiguous" | "Ambiguous",
+  "label": "None" | "Preferences" | "Common Sense" | "Safety",
+}

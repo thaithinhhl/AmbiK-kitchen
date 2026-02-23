@@ -1,31 +1,24 @@
 experiment: 
     examples_generation:
-        model: "gpt-3.5-turbo"
-        #"NousResearch/Llama-2-7b-chat-hf"
-        #"google/gemma-7b"
+        model: "ollama:llama3.1:8b"
+        # Model mapping: ollama:llama3.1:8b -> uses Ollama API
+        # For local HuggingFace models, use format: "meta-llama/Llama-3.1-8B-Instruct"
         generation_kwargs:
-            max_tokens: 256
+            max_new_tokens: 256
             stop: ['We:']
-            logprobs: False
-            logit_bias: {}
+            temperature: 0.7
+            top_p: 0.9
             #num_beams: 4
-            #max_new_tokens: 250
             #num_return_sequences: 1
 
     answering:
-        model: "gpt3.5-turbo"
-        #"NousResearch/Llama-2-7b-chat-hf"
-        #"google/flan-t5-base"
+        model: "ollama:llama3.1:8b"
+        # Model mapping: ollama:llama3.1:8b -> uses Ollama API
+        # For local HuggingFace models, use format: "meta-llama/Llama-3.1-8B-Instruct"
         generation_kwargs:
-            max_tokens: 1
-            logprobs: True
-            top_logprobs: 5
+            max_new_tokens: 1
+            temperature: 0.0
+            top_p: 0.1
             stop: None
-            logit_bias: {317: 100.0,   #  A (with space at front)
-                        347: 100.0,   #  B (with space at front)
-                        327: 100.0,   #  C (with space at front)
-                        360: 100.0,   #  D (with space at front)
-                        412: 100.0,  }
             #num_beams: 4
-            #max_new_tokens: 250
             #num_return_sequences: 1

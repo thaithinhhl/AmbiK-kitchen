@@ -38,15 +38,18 @@ The dataset includes various ambiguity task types to be challenging for LLMs: pr
 <img src="ambik_types_examples.png" width="800">
 
 ## Repository structure:
-- folder `ambik_dataset` contains .csv files with AmbiK data, `ambik_calibrate_100.csv` is calibration data, `ambik_test_900.csv` (`ambik_test_400.csv` for the half of AmbiK) is data for testing ambiguity detection methods
+- folder `ambik_dataset` contains .csv files with AmbiK data, `ambik_test_900.csv` (`ambik_test_400.csv` for the half of AmbiK) is data for testing ambiguity detection methods
 - folder `configs` contains .yaml files, which should be edited for changing used LLMs and their parameters
-- folder `utils` contains code for metrics calculations and LLM launching
-- folders `knowno`, `lofree`, `LAP`, `binary`, `nohelp` contain code for running experiments of KnowNo, LofreeCP, LAP, Binary and NoHelp methods, correspondingly
+- folder `knowno` contains the pipeline implementation for ambiguity detection
+- file `llm.py` contains wrapper for Ollama API
+- file `metrics.py` contains metric calculations
+- file `parse_config.py` handles configuration loading
 - file `requirements.txt` with Python libraries versions used in experiments
 
 ##  Instructions for running experiments on the AmbiK dataset
-1. If you plan to test LofreeCP method, download the `en_core_web_md` model: `python -m spacy download en_core_web_md`
-2. Navigate to the root folder
-3. For KnowNo, LofreeCP or LAP, run a script in the format `python3 <experiment folder>/calibrate.py`, for example,`python3 knowno/calibrate.py` for KnowNo. This script will perform calibration on 100 examples and output the conformal prediction value. Unsert the conformal prediction value into the code of `pipeline.py` in the experiment folder.
-5. For any experiment, run a script in the format `python3 <experiment folder: knowno/lofree>/pipeline.py`. This script performs testing. Results (detailed intermediate and aggregated) will be saved in a new folder named `<CP value>_<LLM1>_<LLM2>` as .csv tables.
+1. Navigate to the root folder
+2. Edit `configs/knowno.yaml` to configure your LLM models and parameters
+3. Run the pipeline: `python3 knowno/pipeline.py`
+4. Results (detailed intermediate and aggregated) will be saved in a new folder named `results_<LLM1>_<LLM2>` as .csv tables
+5. The pipeline uses the `select_answers()` method in `KnowNoPipe` class to determine which options to select - customize this method to implement your own selection algorithm
 
