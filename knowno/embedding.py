@@ -14,7 +14,6 @@ class EnvironmentMatcher:
         self.data = self.load_data()
     
     def load_data(self):
-        """Đọc dữ liệu từ CSV."""
         data = []
         with open(self.dataset_path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)

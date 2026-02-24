@@ -11,16 +11,15 @@ class AmbiguityClassifier:
     def __init__(self, llm_instance, prompt_path=None):
         """
         :param llm_instance: Instance của LLM
-        :param prompt_path: Đường dẫn đến file prompt template (mặc định: prompts/choising.txt)
+        :param prompt_path: Đường dẫn đến file prompt template (mặc định: prompts/classify_amb.txt)
         """
         self.llm = llm_instance
         self.prompt_template = self.load_prompt(prompt_path)
     
     def load_prompt(self, prompt_path=None):
-        """Đọc prompt template từ file."""
         if prompt_path is None:
             from pathlib import Path
-            prompt_path = Path(__file__).parent / "prompts" / "choising.txt"
+            prompt_path = Path(__file__).parent / "prompts" / "classify_amb.txt"
         
         try:
             with open(prompt_path, 'r', encoding='utf-8') as f:
@@ -30,59 +29,76 @@ class AmbiguityClassifier:
             return None
     
     def classify(self, task, step_query, entities, top_objects):
-        """
-        Phân loại step query.
-        
-        :param task: Task tổng quát (string)
-        :param step_query: Step query hiện tại (string)
-        :param entities: Dict với keys 'actions' và 'objects'
-        :param top_objects: List các objects phù hợp [(obj, score), ...] hoặc [obj, ...]
-        :return: Dict với keys: status, label
-        """
-        # Format top objects
         if top_objects and isinstance(top_objects[0], tuple):
-            top_k_list = [obj for obj, _ in top_objects]
+            top_k_list = [obj for obj, *_ in top_objects]
         else:
             top_k_list = list(top_objects)
         
-        # Tạo prompt
-        prompt = self.prompt_template.replace("<TASK>", task)
-        prompt = prompt.replace("<STEP_QUERY>", step_query)
-        prompt = prompt.replace("<ENTITIES>", json.dumps(entities))
-        prompt = prompt.replace("<TOP_K_OBJECTS>", json.dumps(top_k_list))
+        if isinstance(entities, dict):
+            actions = entities.get("actions", [])
+            objects = entities.get("objects", [])
+        else:
+            actions = []
+            objects = []
+        
+        action_str = ", ".join(actions) if actions else ""
+        object_str = ", ".join(objects) if objects else ""
+        
+        # Thay placeholder trong prompt template
+        prompt = (self.prompt_template or "")
+        prompt = prompt.replace("{query}", step_query)
+        prompt = prompt.replace("{action}", action_str)
+        prompt = prompt.replace("{object}", object_str)
+        prompt = prompt.replace("{top_k_env_objects}", json.dumps(top_k_list))
         
         # Gọi LLM
         response_text = self.llm.generate(prompt)
         
-        # Parse JSON 
+        # Parse JSON đơn giản
+        result = None
         try:
-            # Tìm tất cả các JSON objects trong response
-            json_matches = list(re.finditer(r'\{[^{}]*\}', response_text))
-            
-            if json_matches:
-                # Lấy JSON object cuối cùng (thường là kết quả cuối)
-                json_str = json_matches[-1].group()
-                result = json.loads(json_str)
-            else:
-                # Fallback: thử parse toàn bộ response
-                result = json.loads(response_text)
-            
-            # Validate và normalize
-            status = result.get("status", "Unambiguous")
-            label = result.get("label", "None")
-            
-            return {
-                "status": status,
-                "label": label,
-            }
-            
-        except Exception as e:
-            print(f"[Error] Không thể parse JSON từ LLM: {e}")
-            print(f"[Debug] Response: {response_text}")
+            result = json.loads(response_text.strip())
+        except:
+            for match in re.finditer(r'\{[^{}]+\}', response_text):
+                try:
+                    result = json.loads(match.group())
+                    if "classification" in result or "ambiguity_type" in result:
+                        break
+                except:
+                    pass
+        
+        if result is None:
+            print("[Warning] Không parse được JSON classification; mặc định Unambiguous.")
             return {
                 "status": "Unambiguous",
                 "label": "None",
+                "viable_objects": [],
             }
+        
+        # Prompt trả về: classification, ambiguity_type, viable_objects, reasoning
+        # Map sang: status, label, viable_objects, reasoning
+        status = result.get("classification", result.get("status", "Unambiguous"))
+        label = result.get("ambiguity_type", result.get("label", "None"))
+        viable_objects = result.get("viable_objects", [])
+        reasoning = result.get("reasoning", "")
+        
+        # VALIDATION: viable_objects phải là subset của top_k_list (tránh LLM hallucination)
+        if viable_objects and isinstance(viable_objects, list):
+            top_k_set = set(obj.lower().strip() for obj in top_k_list)
+            validated_viable = [
+                obj for obj in viable_objects 
+                if obj and obj.lower().strip() in top_k_set
+            ]
+            if len(validated_viable) < len(viable_objects):
+                print("[Warning] LLM hallucination: viable_objects không nằm trong Top K.")
+            viable_objects = validated_viable
+        
+        return {
+            "status": str(status).strip(),
+            "label": str(label).strip(),
+            "viable_objects": viable_objects if isinstance(viable_objects, list) else [],
+            "reasoning": str(reasoning).strip() if reasoning else ""
+        }
 
 
 if __name__ == "__main__":

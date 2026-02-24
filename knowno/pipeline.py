@@ -21,22 +21,32 @@ class EntityExtractor:
 
     def extract(self, query):
         """
-        Trích xuất các vật thể (objects) từ câu lệnh.
-        
-        :param query: Câu lệnh tự nhiên (ví dụ: "Lấy sữa trong tủ lạnh rót ra cốc sứ")
-        :return: List các objects (ví dụ: ["sữa", "tủ lạnh", "cốc sứ"])
+        Trích xuất cả hành động (actions) và vật thể (objects) từ câu lệnh.
+        return Dict với 2 key:
+                 {
+                    "actions": [...],
+                    "objects": [...]
+                 }
         """
         prompt = f"""
-        [CONTEXT]
+        [ROLE]
         You are a semantic parser for a kitchen robot. 
-        Extract ONLY the physical objects / nouns (kitchen items, tools, food) mentioned in the query.
+        Your job is to extract:
+        - actions: the operations / verbs the robot must do
+        - objects: the physical objects / nouns (kitchen items, tools, food)
 
         [TASK]
         Query: "{query}"
 
         [OUTPUT FORMAT]
-        Return ONLY a JSON array of strings - the list of objects found.
-        Example: ["milk", "glass mug"] or ["clean sponge", "dish soap", "plate"]
+        Return ONLY a JSON object with exactly 2 keys:
+        {{
+          "actions": ["...", "..."],
+          "objects": ["...", "..."]
+        }}
+
+        - Do not add any extra text.
+        - If nothing is found for a field, return an empty array for that field.
 
         JSON:
         """
@@ -44,19 +54,35 @@ class EntityExtractor:
         response_text = self.llm.generate(prompt)
         
         try:
-            # Ưu tiên tìm JSON array [...]
-            json_match = re.search(r'\[.*?\]', response_text, re.DOTALL)
-            if json_match:
-                objects = json.loads(json_match.group())
+            # Tìm JSON object {...} cuối cùng trong response
+            json_matches = list(re.finditer(r'\{.*?\}', response_text, re.DOTALL))
+            if json_matches:
+                json_str = json_matches[-1].group()
+                parsed = json.loads(json_str)
             else:
                 parsed = json.loads(response_text)
-                objects = parsed.get("objects", parsed) if isinstance(parsed, dict) else parsed
+            
+            actions = parsed.get("actions", []) if isinstance(parsed, dict) else []
+            objects = parsed.get("objects", []) if isinstance(parsed, dict) else []
+            
+            if not isinstance(actions, list):
+                actions = [actions] if actions else []
             if not isinstance(objects, list):
                 objects = [objects] if objects else []
-            return [str(o).lower().strip() for o in objects]
+            
+            actions_norm = [str(a).lower().strip() for a in actions if str(a).strip()]
+            objects_norm = [str(o).lower().strip() for o in objects if str(o).strip()]
+            
+            return {
+                "actions": actions_norm,
+                "objects": objects_norm
+            }
         except Exception as e:
-            print(f"[Error] Không thể parse JSON từ LLM: {e}")
-            return []
+            print(f"[Error] Không thể parse JSON từ LLM (actions/objects): {e}")
+            return {
+                "actions": [],
+                "objects": []
+            }
 
 
 class TaskHandler:
@@ -92,10 +118,10 @@ class TaskHandler:
         Giai đoạn 2: Xử lý từng bước (query). Với query thì thực hiện extract.
         Tìm top 5 vật thể phù hợp nhất từ environment và classify ambiguity.
         """
-        # Extract entities từ step query
+        # Extract entities (actions + objects) từ step query
         self.entities = self.extractor.extract(step_query)
         
-        # Sử dụng environment từ start_task hoặc tham số truyền vào
+        # Sử dụng environment từ start_task
         env = environment if environment is not None else self.environment
         
         if not env:
@@ -106,8 +132,14 @@ class TaskHandler:
                 "classification": None
             }
         
+        # Chỉ dùng objects để embedding / matching
+        if isinstance(self.entities, dict):
+            extracted_objects = self.entities.get("objects", [])
+        else:
+            extracted_objects = self.entities
+        
         top_objects = self.embedding_selector.select_top_objects(
-            self.entities, 
+            extracted_objects, 
             env, 
             top_k=3 
         )
@@ -156,7 +188,16 @@ if __name__ == "__main__":
         
         result = handler.handle_step(query)
         
-        print(f"\nObjects extracted: {result['entities']}")
+        entities = result.get("entities", {})
+        if isinstance(entities, dict):
+            actions = entities.get("actions", [])
+            objects = entities.get("objects", [])
+        else:
+            actions = []
+            objects = entities
+        
+        print(f"\nActions extracted: {actions}")
+        print(f"Objects extracted: {objects}")
         
         # In top objects với score
         print(f"Top objects:")
@@ -168,3 +209,8 @@ if __name__ == "__main__":
             cls = result['classification']
             print(f"\nClassification: {cls['status']}")
             print(f"  Label: {cls['label']}")
+            
+            viable = cls.get('viable_objects', [])
+            if viable:
+                print(f"  Viable Objects: {viable}")
+            
