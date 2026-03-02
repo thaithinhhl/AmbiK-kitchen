@@ -11,6 +11,7 @@ if str(_root) not in sys.path:
 from llm import LLM
 from knowno.embedding import EnvironmentMatcher, EmbeddingSelector
 from knowno.classify import AmbiguityClassifier
+from knowno.history import ChatHistory
 
 class EntityExtractor:    
     def __init__(self, llm_instance):
@@ -210,13 +211,17 @@ if __name__ == "__main__":
     # Trích xuất entity từ step task current và tìm environment phù hợp của task đó
     extractor = EntityExtractor(llm)
     env_matcher = EnvironmentMatcher(dataset_path)
-    
     # Thực hiện tìm top K vật thể phù hợp dựa vào task current và thông tin từ môi trường
     embedding_selector = EmbeddingSelector(embed_model)
     classifier = AmbiguityClassifier(llm)
     responder = ResponseGenerator(llm)
-    
     handler = TaskHandler(extractor, env_matcher, embedding_selector, classifier)
+
+    # Chat_History 
+    chat_history = ChatHistory(host="localhost", port=6379, db=0)
+
+    GREETING = 'hey, robot kitchen'
+    FAREWELL = 'thank you robot kitchen'
 
     task = input("Enter task: ")
     print(handler.start_task(task))
